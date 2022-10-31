@@ -1,0 +1,98 @@
+#!/bin/bash
+
+set -e
+set -u
+set -o pipefail
+
+function main() {
+  local token repo buildpackage_path
+  while [ "${#}" != 0 ]; do
+    case "${1}" in
+      --token)
+        token="${2}"
+        shift 2
+        ;;
+
+      --repo)
+        repo="${2}"
+        shift 2
+        ;;
+
+      --buildpackage-path)
+        buildpackage_path="${2}"
+        shift 2
+        ;;
+
+      "")
+        shift
+        ;;
+
+      *)
+        echo "unknown argument \"${1}\""
+        exit 1
+    esac
+  done
+
+  if [[ -z "${token}" ]]; then
+    echo "--token is a required flag"
+    exit 1
+  fi
+
+  if [[ -z "${repo}" ]]; then
+    echo "--repo is a required flag"
+    exit 1
+  fi
+
+  local version
+  version="$(
+    curl "https://api.github.com/repos/${repo}/releases/latest" \
+      --header "Authorization: token ${token}" \
+      --location \
+      --silent \
+    | jq -r -S .tag_name
+  )"
+
+  local content
+  if [[ "${version}" != "null" ]]; then
+    IFS=$'\n' read -r -d '' -a commits < <(
+      curl "https://api.github.com/repos/${repo}/compare/${version}...main" \
+        --header "Authorization: token ${token}" \
+        --location \
+        --silent \
+      | jq -r -S .commits[].sha \
+      && printf '\0' # NULL-terminate the input
+    )
+
+    local changes
+    changes="$(
+      for commit in "${commits[@]}"; do
+        curl "https://api.github.com/repos/${repo}/commits/${commit}/pulls" \
+          --header "Accept: application/vnd.github.groot-preview+json" \
+          --header "Authorization: token ${token}" \
+          --location \
+          --silent \
+        | jq -r -S -c '.[]'
+      done \
+      | jq --slurp -r -S -c 'unique_by(.number) | .[] | select(.head.ref != "automation/github-config/update") | @text "* #\(.number): \(.title) *@\(.user.login)*"' \
+      | sort -n
+    )"
+
+    if [[ -n "${changes}" ]]; then
+      content="$(
+        echo "### Changes"
+        echo "${changes}"
+      )"
+    fi
+  fi
+
+  # Convert multiline output to single line output as GitHub "set-output" does
+  # not support multiline strings:
+  # https://github.community/t5/GitHub-Actions/set-output-Truncates-Multiline-Strings/m-p/38372#M3322
+  content="${content//'%'/'%25'}"
+  content="${content//$'\n'/'%0A'}"
+  content="${content//$'\r'/'%0D'}"
+
+  echo "::set-output name=release_body::${content}"
+}
+
+main "${@:-}"
