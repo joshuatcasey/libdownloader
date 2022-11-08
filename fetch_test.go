@@ -137,7 +137,14 @@ func testFetch(t *testing.T, context spec.G, it spec.S) {
 	context("failure cases", func() {
 		it("returns error when file not found", func() {
 			_, err := libdownloader.Fetch("https://4877be5d01cc44c5b2ea236f476da950.com")
+			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(`could not get url: Get "https://4877be5d01cc44c5b2ea236f476da950.com": dial tcp: lookup 4877be5d01cc44c5b2ea236f476da950.com: no such host`))
+		})
+
+		it("test", func() {
+			_, err := libdownloader.Fetch("https://keys.openpgp.org/vks/v1/by-fingerprint/2C16C765DBE54A088130F1BC4B9B5F600B55F3B4")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`https://keys.openpgp.org/vks/v1/by-fingerprint/2C16C765DBE54A088130F1BC4B9B5F600B55F3B4, with status code 404`))
 		})
 	})
 }

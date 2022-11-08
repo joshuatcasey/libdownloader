@@ -67,6 +67,10 @@ func Fetch(url string, options ...Option) (DownloadedFile, error) {
 		return nil, fmt.Errorf("could not get url: %w", err)
 	}
 
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("could not get url %s, with status code %d", url, response.StatusCode)
+	}
+
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
